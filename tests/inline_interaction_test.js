@@ -1,0 +1,33 @@
+// Isolated event test: host calls are captured, no Codex chat can be created.
+const fs=require('node:fs');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+const fragment=fs.readFileSync(process.argv[2],'utf8');
+const script=[...fragment.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
+const elements=new Map();
+const make=()=>({textContent:'',disabled:false,style:{},firstChild:{textContent:''},attrs:{},setAttribute(k,v){this.attrs[k]=v;}});
+const languageButtons=['fr','en'].map(language=>Object.assign(make(),{dataset:{lang:language}}));
+const root={querySelector(selector){if(!elements.has(selector))elements.set(selector,make());return elements.get(selector);},querySelectorAll(){return languageButtons;}};
+let calls=[],saved=[],release;
+const sandbox={document:{getElementById(){return root;}},window:{openai:{widgetState:null,sendFollowUpMessage(d){calls.push(d);return new Promise(resolve=>{release=resolve;});},setWidgetState(d){saved.push(d);return Promise.resolve();}},addEventListener(){}}};
+vm.runInNewContext(script,sandbox);
+(async()=>{
+ languageButtons[1].onclick();
+ assert.equal(elements.get('[data-handoff]').textContent,'New chat with summary');
+ const first=elements.get('[data-handoff]').onclick();
+ await elements.get('[data-handoff]').onclick();
+ assert.equal(calls.length,1,'Double click must not dispatch a second request');
+ assert.match(calls[0].prompt,/same project/);
+ assert.match(calls[0].prompt,/create_thread/);
+ assert.match(calls[0].prompt,/Do not create a worktree, compact the source/);
+ assert.doesNotMatch(calls[0].prompt,/I authorize archiving only/);
+ assert.match(calls[0].prompt,/without continuing business work/);
+ assert.equal(elements.get('[data-handoff]').disabled,true);
+ release();await first;
+ assert.equal(elements.get('[data-handoff]').textContent,'Handoff requested');
+ assert.equal(saved.at(-1).privateContent.continuationRequested,true);
+ languageButtons[0].onclick();
+ assert.equal(elements.get('[data-handoff]').textContent,'Relais demandé');
+ assert.equal(elements.get('[data-handoff]').disabled,true);
+ console.log(JSON.stringify({language_switch:true,handoff_request_once:true,request_boundary_checked:true,no_native_creation_called:true}));
+})().catch(e=>{console.error(e);process.exitCode=1;});

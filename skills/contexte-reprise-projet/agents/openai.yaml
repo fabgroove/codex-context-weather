@@ -1,0 +1,4 @@
+interface:
+  display_name: "Météo du contexte et reprise"
+  short_description: "Alerte réglable, synthèse et relais de conversation"
+  default_prompt: "Utilise $contexte-reprise-projet pour vérifier le contexte et préparer la reprise dans le même projet."

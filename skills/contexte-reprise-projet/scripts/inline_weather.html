@@ -1,0 +1,59 @@
+<style>
+#context-weather-inline {display:grid;gap:calc(var(--font-size-base)*.25);color:var(--foreground)}
+#context-weather-inline .weather-line {display:flex;align-items:center;flex-wrap:wrap;gap:calc(var(--font-size-base)*.6)}
+#context-weather-inline .weather-source {font-weight:500}
+#context-weather-inline .weather-meter {position:relative;flex:1;min-width:70px;max-width:170px;height:3px;background:var(--muted)}
+#context-weather-inline .weather-fill {height:100%;width:0;background:var(--orange)}
+#context-weather-inline .weather-threshold {position:absolute;top:-3px;height:9px;width:1px;background:var(--muted-foreground)}
+#context-weather-inline .weather-main {padding-inline-end:calc(var(--font-size-base)*7)}
+#context-weather-inline .weather-actions {justify-content:flex-start}
+#context-weather-inline .weather-language {display:inline-flex;gap:calc(var(--font-size-base)*.25)}
+#context-weather-inline .weather-language [data-lang] {min-width:0;min-height:calc((12px + 2 * var(--control-spacing, 12px)) * .85);padding-inline:calc(var(--control-spacing, 12px) * .4);font-size:calc(var(--font-size-base) * .75);background:transparent;border-color:transparent;box-shadow:none}
+#context-weather-inline .weather-language [data-lang][aria-pressed="true"] {color:var(--blue);background:transparent}
+#context-weather-inline .weather-archive {display:inline-flex;align-items:center;gap:calc(var(--font-size-base)*.3)}
+</style>
+<div id="context-weather-inline">
+  <div class="weather-line weather-main"><span class="weather-source">Contexte · <span data-source></span></span><span class="tabular-nums" data-percent></span><div class="weather-meter" role="meter" aria-label="Contexte utilisé" aria-valuemin="0" aria-valuemax="100"><div class="weather-fill"></div><span class="weather-threshold" aria-hidden="true"></span></div></div>
+  <div class="weather-line weather-main text-small"><span data-status></span><span class="text-muted" data-threshold></span><span class="text-muted" data-measured></span></div>
+  <div class="weather-line weather-actions text-small"><button class="btn" data-handoff type="button">Nouveau chat avec résumé</button><button class="btn btn-ghost" data-refresh type="button">Actualiser</button><span class="weather-language"><button class="btn btn-ghost" data-lang="fr" type="button" aria-pressed="true">FR</button><button class="btn btn-ghost" data-lang="en" type="button" aria-pressed="false">EN</button></span></div>
+  <label class="weather-archive text-small"><input type="checkbox" data-archive><span data-archive-label>Archiver l’ancien chat après reprise</span></label>
+  <span class="sr-only" data-feedback role="status" aria-live="polite"></span>
+</div>
+<script>
+(() => {
+ const sample = @@SAMPLE@@;
+ const root = document.getElementById('context-weather-inline');
+ const labels = {fr:{context:'Contexte',threshold:'Alerte',reached:'Seuil atteint',safe:'Sous le seuil',measured:'Mesure enregistrée',refresh:'Actualiser',sent:'Actualisation demandée',failed:'Demande indisponible',handoff:'Nouveau chat avec résumé',handoffSent:'Relais demandé'},en:{context:'Context',threshold:'Alert',reached:'Threshold reached',safe:'Below threshold',measured:'Recorded measurement',refresh:'Refresh',sent:'Refresh requested',failed:'Request unavailable',handoff:'New chat with summary',handoffSent:'Handoff requested'}};
+ let language = sample.language;
+ const saved = window.openai?.widgetState;
+ let continuationRequested = saved?.privateContent?.continuationRequested === true;
+ if (saved?.privateContent?.language in labels) language = saved.privateContent.language;
+ const q = selector => root.querySelector(selector);
+ function render() {
+  const t = labels[language];
+  q('[data-source]').textContent = sample.label;
+  q('.weather-source').firstChild.textContent = t.context+' · ';
+  q('[data-percent]').textContent = sample.percent.toLocaleString(language==='fr'?'fr-FR':'en-GB',{maximumFractionDigits:1})+(language==='fr'?' %':'%');
+  q('[role=meter]').setAttribute('aria-label',t.context);
+  q('[role=meter]').setAttribute('aria-valuenow',Math.min(100,sample.percent));
+  q('.weather-fill').style.width = Math.min(100,sample.percent)+'%';
+  q('.weather-fill').style.background = sample.percent>=Math.max(85,sample.threshold)?'var(--red)':sample.percent>=sample.threshold?'var(--orange)':'var(--green)';
+  q('.weather-threshold').style.left = sample.threshold+'%';
+  q('[data-status]').textContent = sample.percent>=sample.threshold?t.reached:t.safe;
+  q('[data-threshold]').textContent = t.threshold+' '+sample.threshold+(language==='fr'?' %':'%');
+  q('[data-measured]').textContent = t.measured+' · '+new Date(sample.timestamp).toLocaleString(language==='fr'?'fr-FR':'en-GB',{timeZone:'Europe/Paris',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  q('[data-measured]').setAttribute('data-tooltip',sample.tokens.toLocaleString(language==='fr'?'fr-FR':'en-GB')+' / '+sample.window.toLocaleString(language==='fr'?'fr-FR':'en-GB')+' tokens');
+  q('[data-refresh]').textContent = t.refresh;
+  q('[data-archive-label]').textContent = language==='fr'?'Archiver l’ancien chat après reprise':'Archive the old chat after handoff';
+  q('[data-handoff]').textContent = continuationRequested?t.handoffSent:t.handoff;
+  q('[data-handoff]').disabled = continuationRequested;
+  root.querySelectorAll('[data-lang]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.lang===language?'true':'false'));
+ }
+ function saveChoice(){window.openai?.setWidgetState?.({modelContent:null,privateContent:{language,continuationRequested}}).catch(()=>{});}
+ root.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{language=b.dataset.lang;render();saveChoice();});
+ window.addEventListener('openai:set_globals',e=>{const state=e.detail?.globals?.widgetState?.privateContent;if(state?.language in labels)language=state.language;if(typeof state?.continuationRequested==='boolean')continuationRequested=state.continuationRequested;render();});
+ q('[data-refresh]').onclick=async()=>{const button=q('[data-refresh]');button.disabled=true;try{if(!window.openai?.sendFollowUpMessage)throw Error();await window.openai.sendFollowUpMessage({prompt:sample.refresh_prompts[language],title:language==='fr'?'Actualiser la mesure de contexte':'Refresh context measurement'});q('[data-feedback]').textContent=labels[language].sent;}catch(e){q('[data-feedback]').textContent=labels[language].failed;}finally{button.disabled=false;}};
+ q('[data-handoff]').onclick=async()=>{if(continuationRequested)return;const archive=q('[data-archive]').checked;continuationRequested=true;render();try{if(!window.openai?.sendFollowUpMessage)throw Error();const prompt=sample.handoff_prompts[language]+(archive?(language==='fr'?' Après confirmation de la réception dans le nouveau chat, j’autorise l’archivage du chat source uniquement, avec set_thread_archived ; conserve ses automatisations en place.':' After the new chat confirms receipt, I authorize archiving only the source chat with set_thread_archived; retain its automations in place.'): '');await window.openai.sendFollowUpMessage({prompt,title:language==='fr'?'Continuer dans un nouveau chat avec le résumé':'Continue in a new chat with the summary'});saveChoice();q('[data-feedback]').textContent=labels[language].handoffSent;}catch(e){continuationRequested=false;render();q('[data-feedback]').textContent=labels[language].failed;}};
+ render();
+})();
+</script>

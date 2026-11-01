@@ -84,4 +84,4 @@ Avant toute diffusion, contrôler que le paquet source et la documentation corre
 
 ---
 
-*Projet en préparation : la compatibilité des dernières modifications doit encore être vérifiée avant publication.*
+*Première version : la compatibilité des dernières modifications reste à approfondir, notamment sur Apple Silicon.*

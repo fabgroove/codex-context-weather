@@ -84,4 +84,4 @@ Before distribution, check that the source package matches the version described
 
 ---
 
-*Work in progress: compatibility of the latest changes must still be verified before publication.*
+*Initial version: compatibility of the latest changes still needs further verification, especially on Apple Silicon.*
